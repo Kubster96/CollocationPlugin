@@ -7,7 +7,7 @@ clientConnection:
 profiles:
   - schedulerName: default-scheduler
     plugins:
-      queueSort:
+      score:
         enabled:
           - name: CollocationScore
         disabled:
