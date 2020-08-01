@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: redis
+  labels:
+    name: redis-my-scheduler
+spec:
+  schedulerName: collocation-scheduler
+  containers:
+    - name: redis
+      image: redis
