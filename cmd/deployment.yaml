@@ -53,7 +53,12 @@ spec:
     spec:
       serviceAccountName: collocation-scheduler
       containers:
-        - name: collocation-scheduler
+        - command:
+            - ./app
+            - --address=0.0.0.0
+            - --leader-elect=false
+            - --scheduler-name=collocation-scheduler
+          name: collocation-scheduler
           image: collocation-scheduler
           imagePullPolicy: Never
           securityContext:
