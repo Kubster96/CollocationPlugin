@@ -1,4 +1,5 @@
 {
+  "redis;redis": 1.5000,
   "genotype_gvcfs-soykb-52;merge_gcvf-soykb-52": 1.21133770332605,
   "merge_gcvf-soykb-52;genotype_gvcfs-soykb-52": 1.0687805495793719,
   "filtering_indel-soykb-52;haplotype_caller-soykb-52": 1.2464838255977497,

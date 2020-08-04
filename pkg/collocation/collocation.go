@@ -32,6 +32,7 @@ func (s CollocationScore) Name() string {
 }
 
 func (s CollocationScore) Score(ctx context.Context, state *framework.CycleState, p *v1.Pod, nodeName string) (int64, *framework.Status) {
+	fmt.Println("Collocation scoring works!!!")
 	namespace := p.Namespace
 	typeA := p.Annotations[TypeSelector]
 
