@@ -8,6 +8,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/klog"
 	framework "k8s.io/kubernetes/pkg/scheduler/framework/v1alpha1"
 	"math"
 	"os"
@@ -32,7 +33,7 @@ func (s CollocationScore) Name() string {
 }
 
 func (s CollocationScore) Score(ctx context.Context, state *framework.CycleState, p *v1.Pod, nodeName string) (int64, *framework.Status) {
-	fmt.Println("Collocation scoring works!!!")
+	klog.V(3).Infof("Scoring plugin is working!")
 	namespace := p.Namespace
 	typeA := p.Annotations[TypeSelector]
 
@@ -85,18 +86,18 @@ func (s CollocationScore) ScoreExtensions() framework.ScoreExtensions {
 }
 
 func (s CollocationScore) NormalizeScore(ctx context.Context, state *framework.CycleState, p *v1.Pod, nodeScores framework.NodeScoreList) *framework.Status {
-	highest := int64(math.MinInt64)
-	lowest := int64(math.MaxInt64)
+	maximum := int64(math.MinInt64)
+	minimum := int64(math.MaxInt64)
 	for _, nodeScore := range nodeScores {
-		highest = max(highest, nodeScore.Score)
-		lowest = min(lowest, nodeScore.Score)
+		maximum = max(maximum, nodeScore.Score)
+		minimum = min(minimum, nodeScore.Score)
 	}
 
-	minimum := float64(lowest)
-	maximum := float64(highest)
+	highest := float64(maximum)
+	lowest := float64(minimum)
 
 	for i, nodeScore := range nodeScores {
-		nodeScores[i].Score = int64((1 - ((float64(nodeScore.Score) - minimum) / (maximum - minimum))) * float64(framework.MaxNodeScore))
+		nodeScores[i].Score = int64(((1 - ((float64(nodeScore.Score) - lowest) / (highest - lowest))) * float64(framework.MaxNodeScore-framework.MinNodeScore)) + float64(framework.MinNodeScore))
 	}
 	return framework.NewStatus(framework.Success, "")
 }

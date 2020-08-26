@@ -54,11 +54,11 @@ spec:
       serviceAccountName: collocation-scheduler
       containers:
         - command:
-            - ./app
+            - ./collocation-scheduler
             - --config=scheduler-config.yaml
           name: collocation-scheduler
-          image: collocation-scheduler
-          imagePullPolicy: Never
+          image: kubster96/scheduler:collocation-scheduler-latest
+          imagePullPolicy: Always
           securityContext:
             privileged: false
           volumeMounts: []

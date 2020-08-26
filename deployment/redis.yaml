@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: redis3
+  name: redis
   labels:
     name: redis-my-scheduler
   annotations:
