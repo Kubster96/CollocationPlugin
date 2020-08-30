@@ -32,14 +32,30 @@ func (s CollocationScore) Name() string {
 	return Name
 }
 
+type PodNameWithType struct {
+	name  string
+	typee string
+}
+
 func (s CollocationScore) Score(ctx context.Context, state *framework.CycleState, p *v1.Pod, nodeName string) (int64, *framework.Status) {
-	klog.V(3).Infof("Scoring plugin is working!")
+	klog.V(4).Infof("Calculating collocation score for pod %v for node %v", p.Name, nodeName)
 	namespace := p.Namespace
 	typeA := p.Annotations[TypeSelector]
+
+	var podNamesWithTypes []PodNameWithType
 
 	pods, err := s.handle.ClientSet().CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
 		FieldSelector: "spec.nodeName=" + nodeName,
 	})
+
+	for _, pod := range pods.Items {
+		podNamesWithTypes = append(podNamesWithTypes, PodNameWithType{
+			name:  pod.Name,
+			typee: pod.Annotations[TypeSelector],
+		})
+	}
+
+	klog.V(4).Infof("Pods on node %v are %v", nodeName, podNamesWithTypes)
 
 	score := float64(0)
 
@@ -52,9 +68,9 @@ func (s CollocationScore) Score(ctx context.Context, state *framework.CycleState
 			var coefficients map[string]interface{}
 			json.Unmarshal(byteValue, &coefficients)
 
-			for _, pood := range pods.Items {
-				typeB := pood.Annotations[TypeSelector]
-				sizeB := pood.Annotations[SizeSelector]
+			for _, pod := range pods.Items {
+				typeB := pod.Annotations[TypeSelector]
+				sizeB := pod.Annotations[SizeSelector]
 				sizeBNumber, errSize := strconv.ParseFloat(sizeB, 64)
 				if errSize == nil {
 					coefficientString := coefficients[typeA+";"+typeB]
@@ -69,9 +85,10 @@ func (s CollocationScore) Score(ctx context.Context, state *framework.CycleState
 						return int64(0), framework.NewStatus(framework.Error, "Coefficient does not exist for types: "+typeA+" and "+typeB)
 					}
 				} else {
-					return int64(0), framework.NewStatus(framework.Error, "Could not parse size for pod "+pood.Name)
+					return int64(0), framework.NewStatus(framework.Error, "Could not parse size for pod "+pod.Name)
 				}
 			}
+			klog.V(4).Infof("Calculated score for pod %v and node %v - %v", p.Name, nodeName, int64(score))
 			return int64(score), framework.NewStatus(framework.Success, "")
 		} else {
 			return int64(0), framework.NewStatus(framework.Error, "Could not read coefficients.json file")
@@ -105,6 +122,7 @@ func (s CollocationScore) NormalizeScore(ctx context.Context, state *framework.C
 			nodeScores[i].Score = ((framework.MaxNodeScore - framework.MinNodeScore) / 2) + framework.MinNodeScore
 		}
 	}
+	klog.V(4).Infof("Scores after normalization %v", nodeScores)
 
 	return framework.NewStatus(framework.Success, "")
 }

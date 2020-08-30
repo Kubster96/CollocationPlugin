@@ -1,2 +1,2 @@
-kubectl create rolebinding -n kube-system collocation-scheduler-as-kube-scheduler --role=extension-apiserver-authentication-reader --serviceaccount=kube-system:collocation-scheduler &&
+kubectl create rolebinding -n kube-system collocation-scheduler-as-kube-scheduler --role=extension-apiserver-authentication-reader --serviceaccount=kube-system:collocation-scheduler
 kubectl apply -f deployment/deployment.yaml
