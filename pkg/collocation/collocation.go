@@ -96,9 +96,16 @@ func (s CollocationScore) NormalizeScore(ctx context.Context, state *framework.C
 	highest := float64(maximum)
 	lowest := float64(minimum)
 
-	for i, nodeScore := range nodeScores {
-		nodeScores[i].Score = int64(((1 - ((float64(nodeScore.Score) - lowest) / (highest - lowest))) * float64(framework.MaxNodeScore-framework.MinNodeScore)) + float64(framework.MinNodeScore))
+	if lowest != highest {
+		for i, nodeScore := range nodeScores {
+			nodeScores[i].Score = int64(((1 - ((float64(nodeScore.Score) - lowest) / (highest - lowest))) * float64(framework.MaxNodeScore-framework.MinNodeScore)) + float64(framework.MinNodeScore))
+		}
+	} else {
+		for i, _ := range nodeScores {
+			nodeScores[i].Score = ((framework.MaxNodeScore - framework.MinNodeScore) / 2) + framework.MinNodeScore
+		}
 	}
+
 	return framework.NewStatus(framework.Success, "")
 }
 
