@@ -9,5 +9,3 @@ profiles:
         enabled:
           - name: CollocationScore
             weight: 100
-        disabled:
-          - name: "*"

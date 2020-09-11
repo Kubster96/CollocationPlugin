@@ -1,4 +1,5 @@
 {
+  "redis;redis": 1.5,
   "sort_sam-soykb-52;sort_sam-soykb-52": 1.0573886871510572,
   "mbgmodel-montage-1.0;combine_variants-soykb-52": 1.021884618244351,
   "combine_variants-soykb-52;mbgmodel-montage-1.0": 1.0238782717564423,
