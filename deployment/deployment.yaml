@@ -58,7 +58,7 @@ spec:
         - command:
             - ./collocation-scheduler
             - --config=scheduler-config.yaml
-            - --v=10
+            - --v=4
           name: collocation-scheduler
           image: kubster96/scheduler:collocation-scheduler-latest
           imagePullPolicy: Always

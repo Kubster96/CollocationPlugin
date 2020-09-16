@@ -4,29 +4,51 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/gomodule/redigo/redis"
 	"io/ioutil"
 	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog"
 	framework "k8s.io/kubernetes/pkg/scheduler/framework/v1alpha1"
 	"math"
 	"os"
 	"strconv"
+	"strings"
+	"time"
 )
 
 const (
 	Name         = "CollocationScore"
 	TypeSelector = "type"
-	SizeSelector = "size"
 )
+
+var values []string
 
 type CollocationScore struct {
 	handle framework.FrameworkHandle
 }
 
+func (s CollocationScore) PreScore(ctx context.Context, state *framework.CycleState, pod *v1.Pod, nodes []*v1.Node) *framework.Status {
+	conn, err := redis.Dial("tcp", "redis.default.svc.cluster.local:6379")
+	if err != nil {
+		panic(err)
+	} else {
+		defer conn.Close()
+		all_jobs, _ := redis.Strings(conn.Do("SMEMBERS", "hf_all_jobs"))
+
+		if err != nil {
+			values = make([]string, 0)
+		} else {
+			values = all_jobs
+		}
+		klog.V(4).Infof("PreScore for pod %s ended with result %s", pod.Name, values)
+	}
+	return framework.NewStatus(framework.Success, "")
+}
+
 var _ framework.ScorePlugin = &CollocationScore{}
 var _ framework.ScoreExtensions = &CollocationScore{}
+var _ framework.PreScorePlugin = &CollocationScore{}
 
 func (s CollocationScore) Name() string {
 	return Name
@@ -38,63 +60,58 @@ type PodNameWithType struct {
 }
 
 func (s CollocationScore) Score(ctx context.Context, state *framework.CycleState, p *v1.Pod, nodeName string) (int64, *framework.Status) {
+	start := time.Now()
+	klog.V(4).Infof("Score for pod %s started with result %s", p.Name, values)
 	klog.V(4).Infof("Calculating collocation score for pod %v for node %v", p.Name, nodeName)
-	namespace := p.Namespace
+
 	typeA := p.Annotations[TypeSelector]
 
-	var podNamesWithTypes []PodNameWithType
-
-	pods, err := s.handle.ClientSet().CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
-		FieldSelector: "spec.nodeName=" + nodeName,
-	})
-
-	for _, pod := range pods.Items {
-		podNamesWithTypes = append(podNamesWithTypes, PodNameWithType{
-			name:  pod.Name,
-			typee: pod.Annotations[TypeSelector],
-		})
+	var podsOnNode []string
+	for i := range values {
+		keySplit := strings.Split(values[i], "#")
+		if len(keySplit) == 4 && keySplit[1] == nodeName {
+			podsOnNode = append(podsOnNode, values[i])
+		}
 	}
-
-	klog.V(4).Infof("Pods on node %v are %v", nodeName, podNamesWithTypes)
 
 	score := float64(0)
 
-	if err == nil && pods != nil {
-		coefficientsFile, coefficientsFileErr := os.Open("coefficients.json")
+	coefficientsFile, coefficientsFileErr := os.Open("coefficients.json")
 
-		if coefficientsFileErr == nil {
-			defer coefficientsFile.Close()
-			byteValue, _ := ioutil.ReadAll(coefficientsFile)
-			var coefficients map[string]interface{}
-			json.Unmarshal(byteValue, &coefficients)
+	if coefficientsFileErr == nil {
+		defer coefficientsFile.Close()
+		byteValue, _ := ioutil.ReadAll(coefficientsFile)
+		var coefficients map[string]interface{}
+		json.Unmarshal(byteValue, &coefficients)
 
-			for _, pod := range pods.Items {
-				typeB := pod.Annotations[TypeSelector]
-				sizeB := pod.Annotations[SizeSelector]
-				sizeBNumber, errSize := strconv.ParseFloat(sizeB, 64)
-				if errSize == nil {
-					coefficientString := coefficients[typeA+";"+typeB]
-					if coefficientString != nil {
-						coefficient, errCoefficient := strconv.ParseFloat(fmt.Sprintf("%v", coefficientString), 64)
-						if errCoefficient == nil {
-							score += coefficient * sizeBNumber
-						} else {
-							return int64(0), framework.NewStatus(framework.Error, "Could not parse coefficient for types: "+typeA+" and "+typeB)
-						}
+		for _, pod := range podsOnNode {
+			podSplit := strings.Split(pod, "#")
+
+			typeB := podSplit[2]
+			sizeB := podSplit[3]
+			sizeBNumber, errSize := strconv.ParseFloat(sizeB, 64)
+			if errSize == nil {
+				coefficientString := coefficients[typeA+";"+typeB]
+				if coefficientString != nil {
+					coefficient, errCoefficient := strconv.ParseFloat(fmt.Sprintf("%v", coefficientString), 64)
+					if errCoefficient == nil {
+						score += coefficient * sizeBNumber
 					} else {
-						return int64(0), framework.NewStatus(framework.Error, "Coefficient does not exist for types: "+typeA+" and "+typeB)
+						return int64(0), framework.NewStatus(framework.Error, "Could not parse coefficient for types: "+typeA+" and "+typeB)
 					}
 				} else {
-					return int64(0), framework.NewStatus(framework.Error, "Could not parse size for pod "+pod.Name)
+					return int64(0), framework.NewStatus(framework.Error, "Coefficient does not exist for types: "+typeA+" and "+typeB)
 				}
+			} else {
+				return int64(0), framework.NewStatus(framework.Error, "Could not parse size for task "+podSplit[0])
 			}
-			klog.V(4).Infof("Calculated score for pod %v and node %v - %v", p.Name, nodeName, int64(score))
-			return int64(score), framework.NewStatus(framework.Success, "")
-		} else {
-			return int64(0), framework.NewStatus(framework.Error, "Could not read coefficients.json file")
 		}
+		elapsed := time.Since(start)
+		klog.V(4).Infof("Calculated score for pod %v and node %v - %v", p.Name, nodeName, int64(score))
+		klog.V(4).Infof("Scoring took %s ", elapsed)
+		return int64(score), framework.NewStatus(framework.Success, "")
 	} else {
-		return int64(0), framework.NewStatus(framework.Error, "Could not get pods from node "+nodeName)
+		return int64(0), framework.NewStatus(framework.Error, "Could not read coefficients.json file")
 	}
 }
 
@@ -118,7 +135,7 @@ func (s CollocationScore) NormalizeScore(ctx context.Context, state *framework.C
 			nodeScores[i].Score = int64(((1 - ((float64(nodeScore.Score) - lowest) / (highest - lowest))) * float64(framework.MaxNodeScore-framework.MinNodeScore)) + float64(framework.MinNodeScore))
 		}
 	} else {
-		for i, _ := range nodeScores {
+		for i := range nodeScores {
 			nodeScores[i].Score = ((framework.MaxNodeScore - framework.MinNodeScore) / 2) + framework.MinNodeScore
 		}
 	}
